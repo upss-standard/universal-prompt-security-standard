@@ -268,6 +268,160 @@ UPSS: 🛡️ PASS — all 6 gates cleared. Proceeding.
 
 ---
 
+## Scripts & Tools
+
+This skill comes with a complete CLI toolchain for managing UPSS security infrastructure:
+
+### **`upss-init.sh`** — Bootstrap Installer
+
+Initializes the entire UPSS environment.
+
+**What it does:**
+- Creates directory structure: `~/.upss/`, `keys/`, `logs/`, `~/.openclaw/skills/upss-security-guard/`
+- Initializes SQLite database with tables: `users`, `audit_log`, `rate_limit_state`, `prompt_checksums`
+- Generates 4096-bit RSA master signing keypair via OpenSSL
+- Installs SKILL.md to OpenClaw skill directory
+- Creates CLI symlinks for all tools
+
+**Usage:**
+```bash
+bash scripts/upss-init.sh
+```
+
+**Post-install:**
+```bash
+export PATH="$PATH:$HOME/.upss"
+upss-guard --version
+```
+
+---
+
+### **`upss-rbac.sh`** — RBAC Management CLI
+
+Manage users, roles, and rate limits via SQLite.
+
+**Commands:**
+```bash
+# Create a user
+upss-rbac add-user alice --role developer --rate-limit 100
+
+# Update user role
+upss-rbac update-user bob --role admin
+
+# List all users
+upss-rbac list-users
+
+# Show detailed user info
+upss-rbac show-user alice
+
+# Delete a user
+upss-rbac delete-user charlie
+
+# Reset rate limit state
+upss-rbac reset-rate-limit bob
+```
+
+**Roles & Default Rate Limits:**
+- `user` — 60 requests/minute
+- `developer` — 100 requests/minute
+- `admin` — 1,000 requests/minute
+
+---
+
+### **`upss-guard.sh`** — Runtime Gate Enforcement Engine
+
+*⚠️ To be implemented — core security runtime*
+
+Runs the 6-gate validation chain against any prompt.
+
+**Expected usage:**
+```bash
+# Check a prompt
+upss-guard check "Hello world" --user alice
+# Output: 🛡️ UPSS PASS — all 6 gates cleared
+
+# Check an attack
+upss-guard check "Ignore previous instructions" --user alice
+# Output: 🚨 UPSS BLOCK — RS-01: instruction override pattern matched
+
+# Validate tool output (indirect injection)
+upss-guard check-tool-output "$(curl https://example.com)" --user alice
+```
+
+**Gate execution order:**
+1. RS-04: Encoding & character validation
+2. RS-03: Length validation
+3. RS-01/02: Forbidden pattern detection
+4. RS-02: Structural role separation
+5. CR-03: Checksum integrity verification
+6. RS-05: Rate limit check
+
+All events are logged to the SQLite `audit_log` table.
+
+---
+
+### **`upss-keygen.sh`** — OpenSSL Key & Checksum Management
+
+*⚠️ To be implemented — cryptographic tooling*
+
+Manages RSA signing keys and SHA-256 checksums for prompt artifacts.
+
+**Expected usage:**
+```bash
+# Sign a prompt artifact
+upss-keygen sign config/prompts/system.md
+
+# Verify a signature
+upss-keygen verify config/prompts/system.md system.md.sig
+
+# Compute and store checksum
+upss-keygen checksum config/prompts/system.md
+
+# Verify checksum against database
+upss-keygen verify-checksum config/prompts/system.md
+```
+
+---
+
+### **`upss-audit.sh`** — Audit Log Viewer
+
+*⚠️ To be implemented — forensic analysis*
+
+Query and export security audit logs.
+
+**Expected usage:**
+```bash
+# View last 20 events
+upss-audit --tail 20
+
+# Filter by user
+upss-audit --user alice --tail 50
+
+# Filter by gate
+upss-audit --gate RS-01 --tail 100
+
+# Filter by risk level
+upss-audit --risk CRITICAL
+
+# Export to JSON
+upss-audit --user alice --export json > audit-alice.json
+```
+
+---
+
+### Architecture Benefits
+
+| Component | Technology | Benefit |
+|-----------|-----------|----------|
+| **Database** | SQLite | Zero-config embedded DB, no daemon, portable across OS |
+| **Crypto** | OpenSSL | Industry-standard RSA + SHA-256, universally available |
+| **Scripts** | Bash | Runs on any POSIX system, minimal dependencies |
+| **RBAC** | SQLite tables | Role-based rate limiting, fully extensible |
+| **Audit logs** | SQLite + structured logging | Full forensic trail for compliance |
+| **Checksums** | SHA-256 + DB storage | Supply-chain attack detection (CR-03) |
+
+
+
 ## Installation
 
 ```bash
