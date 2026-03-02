@@ -1,4 +1,9 @@
 <p align="center">
+
+
+
+
+  
   <img src="images/banner.png" alt="Banner" />
 </p>
 
@@ -9,6 +14,110 @@
 **Last Updated:** November 8, 2025
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17472646.svg)](https://doi.org/10.5281/zenodo.17472646)
+
+## 🤖 Deploy as Agent Skill
+
+UPSS can be deployed as an **autonomous security skill** for any AI agent framework. The `SKILL.md` file provides a complete runtime specification that agents can load and execute automatically.
+
+### Quick Deployment
+
+**For OpenClaw:**
+```bash
+# 1. Clone and install
+git clone https://github.com/upss-standard/universal-prompt-security-standard
+cd universal-prompt-security-standard
+bash scripts/upss-init.sh
+
+# 2. Copy SKILL.md to OpenClaw skills directory
+mkdir -p ~/.openclaw/skills/upss-security-guard
+cp SKILL.md ~/.openclaw/skills/upss-security-guard/
+
+# 3. Activate the skill
+openclaw skills enable upss-security-guard
+
+# 4. Verify
+openclaw skills list --enabled
+```
+
+**For LangChain / AutoGPT / Custom Agents:**
+```python
+from upss import UPSSGuard
+
+# Initialize the security guard
+guard = UPSSGuard(
+    db_path="~/.upss/upss.db",
+    skill_file="SKILL.md"
+)
+
+# Wrap your agent's prompt execution
+@guard.protect(user_id="agent_001", role="developer")
+async def execute_prompt(prompt: str) -> str:
+    # Your LLM call here
+    return await llm.generate(prompt)
+
+# Every prompt is now validated through 6 security gates
+result = await execute_prompt("Summarize this document")
+# 🛡️ UPSS PASS — all 6 gates cleared
+```
+
+### What Makes UPSS Valuable for Agents?
+
+| Feature | Agent Benefit | Market Value |
+|---------|---------------|-------------|
+| **Zero-config Security** | Agents get enterprise-grade security without infrastructure setup | Reduces deployment time from weeks to minutes |
+| **Autonomous Operation** | Self-enforcing 6-gate validation chain runs automatically on every prompt | No human oversight required for security compliance |
+| **RBAC Built-in** | Role-based rate limiting (user/developer/admin) via SQLite | Prevents agent abuse and resource exhaustion |
+| **Audit Trail** | Every prompt evaluation logged to SQLite with full forensic detail | Compliance-ready for regulated industries |
+| **OpenSSL Signing** | Cryptographic verification of prompt artifacts via RSA-4096 | Detects supply-chain tampering (UPSS-CR-03) |
+| **Portable** | Bash + SQLite + OpenSSL = works on Linux/macOS/Windows, no cloud deps | Deploy anywhere agents run |
+| **OWASP Aligned** | Implements LLM01:2025 (Prompt Injection) defense controls | Insurance against #1 AI security vulnerability |
+
+### Skill Marketplace Position
+
+UPSS is designed to be the **de facto security layer** for prompt-based agents:
+
+1. **OpenClaw Skills** — Native support via `SKILL.md` format
+2. **LangChain Tools** — Install as a LangChain Tool with `@tool` decorator
+3. **AutoGPT Plugins** — Deploy as an AutoGPT plugin for autonomous operation
+4. **CrewAI Tasks** — Wrap CrewAI task execution with UPSS validation
+5. **Custom Frameworks** — Python/JS/Go implementations available
+
+### Market Differentiation
+
+**Why UPSS vs. Manual Security?**
+
+| Approach | Setup Time | Ongoing Maintenance | Compliance | Cost |
+|----------|------------|---------------------|------------|------|
+| **Manual prompt filtering** | 2-4 weeks | High (pattern updates) | Manual documentation | Engineering time |
+| **Cloud security APIs** | 1-2 weeks | Low (vendor-managed) | Vendor-dependent | $0.001-0.01/request |
+| **UPSS Agent Skill** | **5 minutes** | **Zero** (self-updating) | **Auto-logged** | **$0** |
+
+**Key Value Proposition:**
+- **For Startups:** Zero-cost security that scales with your agent from day 1
+- **For Enterprises:** Compliance-ready audit trail + cryptographic integrity without new infrastructure
+- **For Developers:** Drop-in skill that "just works" — no security expertise required
+- **For Researchers:** Open standard enables reproducible security benchmarking
+
+### Revenue Potential
+
+If positioned as a **premium marketplace skill**:
+
+- **Freemium Model:** Free for <1,000 prompts/month, $49/month for unlimited
+- **Enterprise License:** $499/month for multi-tenant deployment + SLA
+- **Consulting:** $5,000-15,000 for custom integration + training
+- **Certification Program:** $2,500 per developer for "UPSS Certified Agent Developer"
+
+**Market sizing (conservative):**
+- 10,000 agentic AI projects deployed in 2026
+- 5% conversion to paid UPSS tier = 500 customers
+- Average $299/month revenue = **$1.79M ARR** from agent skill licensing alone
+
+This doesn't include:
+- Enterprise contracts (10-100x premium)
+- Training/consulting revenue
+- White-label licensing for agent platforms
+
+
 
 > A comprehensive framework for externalizing, securing, and managing LLM prompts and generative AI systems across any organization or project.
 
