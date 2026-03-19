@@ -36,11 +36,11 @@ class SecurityContext:
         # Validate risk level
         valid_levels = {"low", "medium", "high"}
         if self.risk_level not in valid_levels:
-            raise ValueError(
-                f"Invalid risk_level: {self.risk_level}. "
-                f"Must be one of {valid_levels}"
+            from .exceptions import ConfigurationError
+            raise ConfigurationError(
+                f"Invalid risk_level: {self.risk_level}. Must be one of {valid_levels}",
+                details={"risk_level": self.risk_level, "valid_levels": list(valid_levels)}
             )
-
 
 @dataclass
 class SecurityResult:
@@ -64,11 +64,11 @@ class SecurityResult:
     def __post_init__(self) -> None:
         # Ensure risk_score is in valid range
         if not 0.0 <= self.risk_score <= 1.0:
-            raise ValueError(
-                f"risk_score must be between 0.0 and 1.0, got {self.risk_score}"
+            from .exceptions import ConfigurationError
+            raise ConfigurationError(
+                f"risk_score must be between 0.0 and 1.0, got {self.risk_score}",
+                details={"risk_score": self.risk_score}
             )
-
-
 class SecurityMiddleware(ABC):
     """
     Abstract base class for all security middleware.

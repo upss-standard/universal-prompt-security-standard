@@ -1,0 +1,29 @@
+name: upss-demo-agent
+description: Demo agent using UPSS prompt security
+version: 1.0.0
+
+# Agent uses UPSS-managed prompts
+promptRef: assistant-system
+
+# UPSS plugin configuration
+plugins:
+  entries:
+    upss-openclaw:
+      enabled: true
+      config:
+        rootDir: ./prompts
+        promptsConfigPath: ./prompts.json
+        strictMode: true
+        enforceChecksums: true
+        requireApproval: true
+        riskThreshold: 0.7
+        defaultAction: block
+
+# Security hooks enabled
+hooks:
+  - name: message:preprocessed
+    plugin: upss-openclaw
+  - name: before_prompt_build
+    plugin: upss-openclaw
+  - name: agent_end
+    plugin: upss-openclaw

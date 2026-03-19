@@ -1,0 +1,122 @@
+{
+  "$schema": "https://docs.openclaw.ai/schemas/plugin.json",
+  "id": "upss-security-guard",
+  "name": "UPSS Security Guard",
+  "version": "1.1.0",
+  "description": "Enforces Universal Prompt Security Standard (UPSS) 6-gate security chain for prompt injection prevention. Blocks jailbreaks, role confusion, privilege escalation, and supply-chain tampering.",
+  "main": "dist/index.js",
+  "kind": "security",
+  "author": {
+    "name": "Yano.AI Technologies Inc.",
+    "url": "https://yano.ai"
+  },
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "security",
+    "prompt-injection",
+    "upss",
+    "owasp",
+    "llm-security"
+  ],
+  "engines": {
+    "openclaw": ">=25.8.1"
+  },
+  "openclaw": {
+    "hooks": [
+      {
+        "event": "message:preprocessed",
+        "handler": "handleMessagePreprocessed",
+        "blocking": true
+      },
+      {
+        "event": "prompt:build:before",
+        "handler": "handleBeforePromptBuild",
+        "blocking": true
+      }
+    ],
+    "tools": [
+      {
+        "name": "upss_check",
+        "handler": "upssCheckTool"
+      }
+    ],
+    "commands": [
+      {
+        "name": "upss-check",
+        "handler": "upssCheckCommand"
+      }
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable UPSS security enforcement"
+      },
+      "riskThreshold": {
+        "type": "number",
+        "default": 0.7,
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Risk score threshold for blocking (0-1)"
+      },
+      "defaultAction": {
+        "type": "string",
+        "enum": ["block", "sanitize", "warn_only"],
+        "default": "block",
+        "description": "Action when validation fails"
+      },
+      "maxUserPromptLength": {
+        "type": "integer",
+        "default": 10000,
+        "description": "Maximum user prompt length"
+      },
+      "maxSystemPromptLength": {
+        "type": "integer",
+        "default": 32768,
+        "description": "Maximum system prompt length"
+      },
+      "enforceChecksums": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable checksum verification (Gate 5)"
+      },
+      "enableRateLimit": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable rate limiting (Gate 6)"
+      },
+      "rateLimits": {
+        "type": "object",
+        "properties": {
+          "user": { "type": "integer", "default": 60 },
+          "developer": { "type": "integer", "default": 100 },
+          "admin": { "type": "integer", "default": 1000 }
+        },
+        "description": "Rate limits per role (requests per minute)"
+      },
+      "auditLogPath": {
+        "type": "string",
+        "default": "~/.upss/logs/audit.jsonl",
+        "description": "Path to audit log file"
+      }
+    }
+  },
+  "skills": ["skill"],
+  "uiHints": {
+    "riskThreshold": {
+      "label": "Risk Threshold",
+      "placeholder": "0.7",
+      "help": "Prompts with risk score above this threshold are blocked"
+    },
+    "defaultAction": {
+      "label": "Default Action",
+      "help": "What to do when a security violation is detected"
+    }
+  }
+}

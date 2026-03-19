@@ -15,8 +15,9 @@ from upss import (
     LightweightAuditor,
     SimpleRBAC,
     InputValidator,
+    ChecksumMiddleware,
+    RateLimitMiddleware,
 )
-
 
 class TestSecurityContext:
     """Test SecurityContext dataclass."""
@@ -50,14 +51,14 @@ class TestSecurityContext:
         assert context.metadata["role"] == "admin"
     
     def test_invalid_risk_level_raises_error(self):
-        """Test that invalid risk level raises ValueError."""
-        with pytest.raises(ValueError, match="Invalid risk_level"):
+        """Test that invalid risk level raises ConfigurationError."""
+        from upss import ConfigurationError
+        with pytest.raises(ConfigurationError, match="Invalid risk_level"):
             SecurityContext(
                 user_id="test",
                 prompt_id="test",
                 risk_level="invalid"
             )
-
 
 class TestSecurityResult:
     """Test SecurityResult dataclass."""
@@ -79,8 +80,9 @@ class TestSecurityResult:
         assert result.metadata["check"] == "passed"
     
     def test_invalid_risk_score_raises_error(self):
-        """Test that invalid risk score raises ValueError."""
-        with pytest.raises(ValueError, match="risk_score must be between"):
+        """Test that invalid risk score raises ConfigurationError."""
+        from upss import ConfigurationError
+        with pytest.raises(ConfigurationError, match="risk_score must be between"):
             SecurityResult(
                 prompt="test",
                 is_safe=True,
@@ -88,7 +90,6 @@ class TestSecurityResult:
                 violations=[],
                 metadata={}
             )
-
 
 class TestBasicSanitizer:
     """Test BasicSanitizer middleware."""
@@ -388,3 +389,153 @@ class TestSecurityPipeline:
                    .use(LightweightAuditor()))
         
         assert len(pipeline.middlewares) == 3
+
+
+
+class TestChecksumMiddleware:
+    """Test ChecksumMiddleware (Gate 5 - CR-03)."""
+    
+    @pytest.mark.asyncio
+    async def test_allows_valid_checksum(self):
+        """Test that valid checksum passes."""
+        checksum_mw = ChecksumMiddleware(checksums={
+            "test-prompt": "a" * 64  # Dummy SHA-256
+        })
+        
+        # Register with matching content
+        content = "Valid prompt content"
+        checksum_mw.register_checksum("test-prompt", content)
+        
+        context = SecurityContext(user_id="test", prompt_id="test-prompt")
+        result = await checksum_mw.process(content, context)
+        
+        assert result.is_safe is True
+        assert result.risk_score == 0.0
+        assert result.metadata["status"] == "verified"
+    
+    @pytest.mark.asyncio
+    async def test_blocks_checksum_mismatch(self):
+        """Test that checksum mismatch blocks."""
+        checksum_mw = ChecksumMiddleware(checksums={
+            "test-prompt": "a" * 64  # Wrong checksum
+        })
+        
+        context = SecurityContext(user_id="test", prompt_id="test-prompt")
+        result = await checksum_mw.process("Different content", context)
+        
+        assert result.is_safe is False
+        assert result.risk_score == 1.0
+        assert "checksum mismatch" in result.violations[0].lower()
+        assert result.metadata["control_id"] == "CR-03"
+    
+    @pytest.mark.asyncio
+    async def test_warns_on_missing_checksum(self):
+        """Test that missing checksum warns but allows."""
+        checksum_mw = ChecksumMiddleware(fail_on_missing=False)
+        
+        context = SecurityContext(user_id="test", prompt_id="unknown-prompt")
+        result = await checksum_mw.process("Some content", context)
+        
+        assert result.is_safe is True  # Warns but allows
+        assert result.risk_score == 0.1
+        assert result.metadata["status"] == "no_checksum_warning"
+    
+    @pytest.mark.asyncio
+    async def test_blocks_on_missing_checksum_when_configured(self):
+        """Test that missing checksum blocks when fail_on_missing=True."""
+        checksum_mw = ChecksumMiddleware(fail_on_missing=True)
+        
+        context = SecurityContext(user_id="test", prompt_id="unknown-prompt")
+        result = await checksum_mw.process("Some content", context)
+        
+        assert result.is_safe is False
+        assert "no checksum registered" in result.violations[0].lower()
+
+
+class TestRateLimitMiddleware:
+    """Test RateLimitMiddleware (Gate 6 - RS-05)."""
+    
+    @pytest.mark.asyncio
+    async def test_allows_within_limit(self):
+        """Test that requests within limit pass."""
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = f"{tmpdir}/test.db"
+            rate_limit = RateLimitMiddleware(db_path=db_path, limits={"user": 5})
+            
+            context = SecurityContext(user_id="alice", prompt_id="test")
+            
+            # Make 3 requests - should all pass
+            for i in range(3):
+                result = await rate_limit.process(f"Prompt {i}", context)
+                assert result.is_safe is True
+    
+    @pytest.mark.asyncio
+    async def test_blocks_over_limit(self):
+        """Test that requests over limit are blocked."""
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = f"{tmpdir}/test.db"
+            rate_limit = RateLimitMiddleware(db_path=db_path, limits={"user": 2})
+            
+            context = SecurityContext(user_id="bob", prompt_id="test")
+            
+            # First 2 should pass
+            result1 = await rate_limit.process("Prompt 1", context)
+            result2 = await rate_limit.process("Prompt 2", context)
+            assert result1.is_safe is True
+            assert result2.is_safe is True
+            
+            # Third should be blocked
+            result3 = await rate_limit.process("Prompt 3", context)
+            assert result3.is_safe is False
+            assert "rate limit exceeded" in result3.violations[0].lower()
+            assert result3.metadata["control_id"] == "RS-05"
+    
+    @pytest.mark.asyncio
+    async def test_role_based_limits(self):
+        """Test that limits are applied per role."""
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = f"{tmpdir}/test.db"
+            rate_limit = RateLimitMiddleware(
+                db_path=db_path,
+                limits={"user": 2, "admin": 10}
+            )
+            
+            # Admin should have higher limit
+            admin_context = SecurityContext(
+                user_id="admin1",
+                prompt_id="test",
+                metadata={"role": "admin"}
+            )
+            
+            # Make 5 requests as admin - should all pass
+            for i in range(5):
+                result = await rate_limit.process(f"Admin prompt {i}", admin_context)
+                assert result.is_safe is True
+    
+    @pytest.mark.asyncio
+    async def test_user_isolation(self):
+        """Test that rate limits are isolated per user."""
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = f"{tmpdir}/test.db"
+            rate_limit = RateLimitMiddleware(db_path=db_path, limits={"user": 2})
+            
+            alice_ctx = SecurityContext(user_id="alice", prompt_id="test")
+            bob_ctx = SecurityContext(user_id="bob", prompt_id="test")
+            
+            # Alice uses her limit
+            await rate_limit.process("P1", alice_ctx)
+            await rate_limit.process("P2", alice_ctx)
+            alice_result = await rate_limit.process("P3", alice_ctx)
+            assert alice_result.is_safe is False  # Alice blocked
+            
+            # Bob should still be allowed
+            bob_result = await rate_limit.process("P1", bob_ctx)
+            assert bob_result.is_safe is True  # Bob allowed

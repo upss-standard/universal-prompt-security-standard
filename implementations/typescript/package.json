@@ -1,0 +1,17 @@
+{
+  "name": "@upss/typescript-monorepo",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Universal Prompt Security Standard - TypeScript implementations",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

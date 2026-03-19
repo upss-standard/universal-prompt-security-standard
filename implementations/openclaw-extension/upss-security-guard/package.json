@@ -1,0 +1,39 @@
+{
+  "name": "@openclaw/upss-security-guard",
+  "version": "1.1.0",
+  "description": "UPSS Security Guard - Enforces 6-gate security chain for prompt injection prevention",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "openclaw": {
+    "plugin": true,
+    "manifest": "./openclaw.plugin.json",
+    "extensions": ["./dist/index.js"]
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Yano.AI Technologies Inc.",
+    "url": "https://yano.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/upss-standard/universal-prompt-security-standard"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "security",
+    "prompt-injection",
+    "upss",
+    "owasp",
+    "llm-security"
+  ]
+}

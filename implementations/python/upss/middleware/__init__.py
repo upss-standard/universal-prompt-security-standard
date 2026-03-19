@@ -8,18 +8,23 @@ Essential Primitives:
     - BasicSanitizer: Block common prompt injection patterns
     - LightweightAuditor: Simple access logging
     - SimpleRBAC: Role-based access control
-    - InputValidator: Runtime input validation
+    - InputValidator: Runtime input validation (Gate 1-2)
 
-Enhanced Security:
-    - RuntimePolicyEngine: Custom security policies
-    - PromptGuard: Custom validation rules
+Advanced Security:
+    - ChecksumMiddleware: Supply-chain tampering detection (Gate 5 - CR-03)
+    - RateLimitMiddleware: Rate-based abuse prevention (Gate 6 - RS-05)
 
-Advanced:
-    - AnomalyDetector: Usage pattern monitoring
-    - PatternMonitor: Suspicious activity tracking
+OWASP LLM01:2025 Controls:
+    - RS-01/RS-02: Injection detection (BasicSanitizer)
+    - RS-03: Length validation (InputValidator)
+    - RS-04: Encoding validation (InputValidator)
+    - RS-05: Rate limiting (RateLimitMiddleware)
+    - CR-03: Checksum verification (ChecksumMiddleware)
 """
 
 from .auditor import LightweightAuditor
+from .checksum import ChecksumMiddleware
+from .ratelimit import RateLimitMiddleware
 from .rbac import SimpleRBAC
 from .sanitizer import BasicSanitizer
 from .validator import InputValidator
@@ -29,4 +34,6 @@ __all__ = [
     "LightweightAuditor",
     "SimpleRBAC",
     "InputValidator",
+    "ChecksumMiddleware",
+    "RateLimitMiddleware",
 ]
