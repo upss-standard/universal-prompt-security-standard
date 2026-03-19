@@ -19,6 +19,20 @@ import { loadConfig, UPSSConfig } from "./config.js";
 let pipeline: ReturnType<typeof createSecurityPipeline> | null = null;
 let pluginConfig: Required<UPSSConfig> | null = null;
 
+// ── Logging Helper ─────────────────────────────────────────────────────────
+
+function log(message: string): void {
+  const now = new Date();
+  const timestamp = now.toTimeString().split(" ")[0];
+  console.log(`${timestamp} [plugins] [upss-security-guard] ${message}`);
+}
+
+function logError(message: string): void {
+  const now = new Date();
+  const timestamp = now.toTimeString().split(" ")[0];
+  console.error(`${timestamp} [plugins] [upss-security-guard] ❌ ${message}`);
+}
+
 // ── Hook Handlers ───────────────────────────────────────────────────────────
 
 /**
@@ -30,7 +44,7 @@ export async function handleMessagePreprocessed(
   ctx: any
 ): Promise<{ allow: boolean; reason?: string; metadata?: any }> {
   if (!pipeline) {
-    console.error("UPSS: Pipeline not initialized");
+    logError("Pipeline not initialized");
     return { allow: false, reason: "UPSS not initialized" };
   }
 
@@ -46,8 +60,8 @@ export async function handleMessagePreprocessed(
   });
 
   if (!result.isSafe) {
-    console.log(
-      `🚨 UPSS BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
+    log(
+      `🚨 BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
     );
     return {
       allow: false,
@@ -76,11 +90,12 @@ export async function handleBeforePromptBuild(
   ctx: any
 ): Promise<{ allow: boolean; reason?: string; metadata?: any }> {
   if (!pipeline) {
-    console.error("UPSS: Pipeline not initialized");
+    logError("Pipeline not initialized");
     return { allow: false, reason: "UPSS not initialized" };
   }
 
-  const { systemPrompts = [], toolPrompts = [], userInput, userId, promptRef } = ctx;
+  const { systemPrompts = [], toolPrompts = [], userInput, userId, promptRef } =
+    ctx;
 
   // Combine all prompt parts
   const combinedPrompt = [...systemPrompts, ...toolPrompts, userInput]
@@ -97,8 +112,8 @@ export async function handleBeforePromptBuild(
   });
 
   if (!result.isSafe) {
-    console.log(
-      `🚨 UPSS BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
+    log(
+      `🚨 BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
     );
     return {
       allow: false,
@@ -131,7 +146,7 @@ export function register(api: any): void {
 
   // Check for existing registration
   if ((globalThis as any).__upssRegistered) {
-    console.warn("UPSS Security Guard already registered, skipping");
+    log("⚠️  Already registered, skipping");
     return;
   }
 
@@ -142,18 +157,17 @@ export function register(api: any): void {
     // Mark as registered
     (globalThis as any).__upssRegistered = true;
 
-    console.log("🛡️ UPSS Security Guard plugin registered successfully");
-    console.log(`   Risk threshold: ${pluginConfig.riskThreshold}`);
-    console.log(`   Default action: ${pluginConfig.defaultAction}`);
-    console.log(`   Max user prompt: ${pluginConfig.maxUserPromptLength} chars`);
+    log(
+      `🛡️  Plugin registered (6 gates, riskThreshold=${pluginConfig.riskThreshold}, action=${pluginConfig.defaultAction})`
+    );
 
     // Register hooks using api.on() pattern (like foundry)
     if (api.on) {
       api.on("message:preprocessed", handleMessagePreprocessed);
-      console.log("  ✓ Hook: message:preprocessed");
+      log("✓ Hook registered: message:preprocessed");
 
       api.on("prompt:build:before", handleBeforePromptBuild);
-      console.log("  ✓ Hook: prompt:build:before");
+      log("✓ Hook registered: prompt:build:before");
     }
 
     // Register tool for manual checks
@@ -198,17 +212,17 @@ export function register(api: any): void {
               gate: result.metadata.gate,
               controlId: result.metadata.controlId,
               summary: result.isSafe
-                ? "🛡️ UPSS PASS — all 6 security gates cleared"
-                : `🚨 UPSS BLOCK — ${result.violations[0]}`,
+                ? "🛡️ PASS — all 6 security gates cleared"
+                : `🚨 BLOCK — ${result.violations[0]}`,
             };
           },
         },
         { names: ["upss_check"] }
       );
-      console.log("  ✓ Tool: upss_check");
+      log("✓ Tool registered: upss_check");
     }
   } catch (error) {
-    console.error("Failed to register UPSS Security Guard plugin:", error);
+    logError(`Registration failed: ${error}`);
     throw error;
   }
 }
