@@ -192,34 +192,46 @@ class LightweightAuditor(SecurityMiddleware):
         end_time: Optional[datetime],
     ) -> bool:
         """Check if entry matches all filters."""
-        if user_id and entry.get("user_id") != user_id:
-            return False
+        filters = [
+            (user_id, "user_id"),
+            (prompt_id, "prompt_id"),
+            (prompt_hash, "prompt_hash"),
+            (status, "status"),
+        ]
 
-        if prompt_id and entry.get("prompt_id") != prompt_id:
-            return False
-
-        if prompt_hash and entry.get("prompt_hash") != prompt_hash:
-            return False
-
-        if status and entry.get("status") != status:
-            return False
+        for filter_val, key in filters:
+            if filter_val and entry.get(key) != filter_val:
+                return False
 
         if control_id and control_id not in entry.get("control_ids", []):
             return False
 
-        if start_time or end_time:
-            try:
-                entry_time = datetime.fromisoformat(
-                    entry["timestamp"].replace("Z", "+00:00")
-                )
-                if start_time and entry_time < start_time:
-                    return False
-                if end_time and entry_time > end_time:
-                    return False
-            except (KeyError, ValueError):
-                return False
+        if not self._time_matches(entry, start_time, end_time):
+            return False
 
         return True
+
+    def _time_matches(
+        self,
+        entry: dict,
+        start_time: Optional[datetime],
+        end_time: Optional[datetime],
+    ) -> bool:
+        """Check if entry timestamp is within time range."""
+        if not start_time and not end_time:
+            return True
+
+        try:
+            entry_time = datetime.fromisoformat(
+                entry["timestamp"].replace("Z", "+00:00")
+            )
+            if start_time and entry_time < start_time:
+                return False
+            if end_time and entry_time > end_time:
+                return False
+            return True
+        except (KeyError, ValueError):
+            return False
 
     def query_logs(
         self,
