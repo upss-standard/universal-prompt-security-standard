@@ -15,6 +15,23 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17472646.svg)](https://doi.org/10.5281/zenodo.17472646)
 
+## 📦 Install via AI Agent
+
+Send this to your AI agent for autonomous installation:
+
+```
+Read https://raw.githubusercontent.com/upss-standard/universal-prompt-security-standard/main/install.md and execute the installation steps.
+```
+
+Or pipe directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/upss-standard/universal-prompt-security-standard/main/install.md | claude
+```
+
+See [OpenClaw Installation Guide](docs/openclaw-installation.md) for detailed instructions.
+
+
 ## 🤖 Deploy as Agent Skill
 
 UPSS can be deployed as an **autonomous security skill** for any AI agent framework. The `SKILL.md` file provides a complete runtime specification that agents can load and execute automatically.
