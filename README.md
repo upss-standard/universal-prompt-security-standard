@@ -21,23 +21,21 @@ UPSS can be deployed as an **autonomous security skill** for any AI agent framew
 
 ### Quick Deployment
 
-**For OpenClaw:**
+**For OpenClaw (Native Plugin):**
 ```bash
-# 1. Clone and install
+# Install the native OpenClaw plugin for runtime enforcement
 git clone https://github.com/upss-standard/universal-prompt-security-standard
 cd universal-prompt-security-standard
-bash scripts/upss-init.sh
 
-# 2. Copy SKILL.md to OpenClaw skills directory
-mkdir -p ~/.openclaw/skills/upss-security-guard
-cp SKILL.md ~/.openclaw/skills/upss-security-guard/
-
-# 3. Activate the skill
-openclaw skills enable upss-security-guard
-
-# 4. Verify
-openclaw skills list --enabled
+# Build and install plugin
+cd implementations/openclaw-extension/upss-security-guard
+npm install && npm run build && npm pack
+openclaw plugins install openclaw-upss-security-guard-1.1.0.tgz
+openclaw plugins enable upss-security-guard
+openclaw gateway restart
 ```
+
+See [OpenClaw Installation Guide](docs/openclaw-installation.md) for detailed instructions.
 
 **For LangChain / AutoGPT / Custom Agents:**
 ```python
@@ -177,8 +175,14 @@ result = await pipeline.execute(user_prompt, context)
 - `LightweightAuditor` - File-based audit logging (no complex infrastructure)
 - `SimpleRBAC` - Role-based access control
 - `InputValidator` - Runtime input validation
+**Security Primitives (6-Gate Pipeline):**
+- `InputValidator` - Gate 1 & 2: Encoding and length validation (RS-03, RS-04)
+- `BasicSanitizer` - Gate 3: Blocks 90%+ of prompt injection attacks (RS-01, RS-02)
+- `SimpleRBAC` - Gate 4: Role-based access control
+- `ChecksumMiddleware` - Gate 5: SHA-256 integrity verification (CR-03)
+- `RateLimitMiddleware` - Gate 6: SQLite-backed rate limiting (RS-05)
+- `LightweightAuditor` - Structured audit logging with gate_id, control_id, prompt_hash
 
-See [MIDDLEWARE.md](implementations/python/MIDDLEWARE.md) for complete documentation.
 
 ### Scope
 

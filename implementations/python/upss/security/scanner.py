@@ -96,10 +96,12 @@ def render(
         return f"{system_prompt}\n\n### USER INPUT\n{user_input}\n### END USER INPUT"
     else:
         from ..core.exceptions import ConfigurationError
+
         raise ConfigurationError(
             f"Unknown style: {style}",
-            details={"style": style, "valid_styles": ["xml", "markdown"]}
+            details={"style": style, "valid_styles": ["xml", "markdown"]},
         )
+
 
 def calculate_risk_score(content: str) -> int:
     """
