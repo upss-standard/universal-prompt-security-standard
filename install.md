@@ -29,15 +29,25 @@ Install the UPSS 6-gate security system with OpenClaw plugin for runtime prompt 
 ### 1. Clone Repository
 
 ```bash
+# Clone from main branch (after PR merge) or use PR branch for preview
 git clone https://github.com/upss-standard/universal-prompt-security-standard
 cd universal-prompt-security-standard
+
+# If openclaw-extension directory is missing, checkout the PR branch:
+# git checkout docs/add-agents-md-documentation
 ```
 
 ### 2. Install Python Library
 
 ```bash
 cd implementations/python
-pip install -e .
+
+# macOS may require --break-system-packages due to PEP 668
+pip3 install --user -e . --break-system-packages
+
+# Or use a virtual environment:
+# python3 -m venv venv && source venv/bin/activate && pip install -e .
+
 cd ../..
 ```
 
@@ -60,6 +70,30 @@ cd ../../..
 ### 4. Install Plugin in OpenClaw
 
 ```bash
+# First, remove any stale config references
+python3 << 'EOF'
+import json
+import os
+
+config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+if os.path.exists(config_path):
+    with open(config_path, 'r') as f:
+        data = json.load(f)
+    
+    if 'plugins' in data:
+        # Remove stale load paths
+        if 'load' in data['plugins'] and 'paths' in data['plugins']['load']:
+            data['plugins']['load']['paths'] = [
+                p for p in data['plugins']['load']['paths']
+                if 'upss' not in p.lower()
+            ]
+    
+    with open(config_path, 'w') as f:
+        json.dump(data, f, indent=2)
+    print('Config cleaned')
+EOF
+
+# Install the plugin
 openclaw plugins install implementations/openclaw-extension/upss-security-guard/openclaw-upss-security-guard-1.1.0.tgz
 ```
 
