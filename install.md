@@ -21,7 +21,7 @@ Install the UPSS 6-gate security system with OpenClaw plugin for runtime prompt 
 - [ ] Install Python library
 - [ ] Build OpenClaw plugin
 - [ ] Install plugin in OpenClaw
-- [ ] Enable and configure plugin
+- [ ] Configure plugin (add to allow list, entries, install record)
 - [ ] Verify installation with test prompts
 
 ## Steps
@@ -34,6 +34,7 @@ git clone https://github.com/upss-standard/universal-prompt-security-standard
 cd universal-prompt-security-standard
 
 # If openclaw-extension directory is missing, checkout the PR branch:
+# git fetch origin docs/add-agents-md-documentation
 # git checkout docs/add-agents-md-documentation
 ```
 
@@ -54,7 +55,7 @@ cd ../..
 Verify:
 
 ```bash
-python3 -c "from upss import SecurityPipeline; print('UPSS Python library installed')"
+python3 -c "from upss import SecurityPipeline; print('✅ UPSS Python library installed')"
 ```
 
 ### 3. Build OpenClaw Plugin
@@ -70,67 +71,96 @@ cd ../../..
 ### 4. Install Plugin in OpenClaw
 
 ```bash
-# First, remove any stale config references
-python3 << 'EOF'
-import json
-import os
-
-config_path = os.path.expanduser("~/.openclaw/openclaw.json")
-if os.path.exists(config_path):
-    with open(config_path, 'r') as f:
-        data = json.load(f)
-    
-    if 'plugins' in data:
-        # Remove stale load paths
-        if 'load' in data['plugins'] and 'paths' in data['plugins']['load']:
-            data['plugins']['load']['paths'] = [
-                p for p in data['plugins']['load']['paths']
-                if 'upss' not in p.lower()
-            ]
-    
-    with open(config_path, 'w') as f:
-        json.dump(data, f, indent=2)
-    print('Config cleaned')
-EOF
-
-# Install the plugin
+# Run the install command (may take time)
 openclaw plugins install implementations/openclaw-extension/upss-security-guard/openclaw-upss-security-guard-1.1.0.tgz
 ```
 
-### 5. Enable and Configure Plugin
+**IMPORTANT:** If the install command times out or doesn't complete, the plugin files may be copied but the config may not be updated. Proceed to Step 5 to ensure proper configuration.
 
-Add to `~/.openclaw/openclaw.json`:
+### 5. Configure Plugin (REQUIRED)
 
-```json
-{
-  "plugins": {
-    "allow": ["upss-security-guard"],
-    "entries": {
-      "upss-security-guard": {
-        "enabled": true,
-        "config": {
-          "riskThreshold": 0.7,
-          "defaultAction": "block",
-          "maxUserPromptLength": 10000,
-          "enforceChecksums": true,
-          "enableRateLimit": true
-        }
-      }
+The plugin needs to be added to the OpenClaw config. Run this to ensure proper configuration:
+
+```bash
+python3 << 'EOF'
+import json
+import os
+from datetime import datetime, timezone
+
+config_path = os.path.expanduser('~/.openclaw/openclaw.json')
+
+# Read existing config
+if os.path.exists(config_path):
+    with open(config_path, 'r') as f:
+        data = json.load(f)
+else:
+    data = {}
+
+# Ensure plugins section exists
+if 'plugins' not in data:
+    data['plugins'] = {}
+
+# Add to allow list
+if 'allow' not in data['plugins']:
+    data['plugins']['allow'] = []
+if 'upss-security-guard' not in data['plugins']['allow']:
+    data['plugins']['allow'].append('upss-security-guard')
+
+# Add to entries with config
+if 'entries' not in data['plugins']:
+    data['plugins']['entries'] = {}
+data['plugins']['entries']['upss-security-guard'] = {
+    'enabled': True,
+    'config': {
+        'riskThreshold': 0.7,
+        'defaultAction': 'block',
+        'maxUserPromptLength': 10000,
+        'enforceChecksums': True,
+        'enableRateLimit': True
     }
-  }
 }
+
+# Add install record (required for proper provenance)
+if 'installs' not in data['plugins']:
+    data['plugins']['installs'] = {}
+data['plugins']['installs']['upss-security-guard'] = {
+    'source': 'archive',
+    'spec': 'openclaw-upss-security-guard-1.1.0.tgz',
+    'installPath': os.path.expanduser('~/.openclaw/extensions/upss-security-guard'),
+    'version': '1.1.0',
+    'resolvedName': '@openclaw/upss-security-guard',
+    'resolvedVersion': '1.1.0',
+    'resolvedAt': datetime.now(timezone.utc).isoformat(),
+    'installedAt': datetime.now(timezone.utc).isoformat()
+}
+
+# Clean up stale load paths if any
+if 'load' in data['plugins'] and 'paths' in data['plugins']['load']:
+    data['plugins']['load']['paths'] = [
+        p for p in data['plugins']['load']['paths']
+        if 'upss' not in p.lower()
+    ]
+
+# Write config
+with open(config_path, 'w') as f:
+    json.dump(data, f, indent=2)
+
+print('✅ Plugin configured successfully')
+print('  - Added to allow list')
+print('  - Added to entries with config')
+print('  - Added install record')
+EOF
 ```
 
 Enable the plugin:
 
 ```bash
 openclaw plugins enable upss-security-guard
-openclaw gateway restart
 ```
 
 ### 6. Verify Installation
 
-Test safe prompt:
+Test Python library:
 
 ```bash
 python3 -c "
@@ -143,28 +173,16 @@ async def test():
     pipeline = SecurityPipeline()
     pipeline.use(BasicSanitizer())
     ctx = SecurityContext(user_id='test', prompt_id='test')
+    
+    # Test safe prompt
     result = await pipeline.execute('Hello world', ctx)
-    print('PASS' if result.is_safe else 'FAIL')
-
-asyncio.run(test())
-"
-```
-
-Test injection blocking:
-
-```bash
-python3 -c "
-import sys
-sys.path.insert(0, 'implementations/python')
-from upss import SecurityPipeline, SecurityContext, BasicSanitizer
-import asyncio
-
-async def test():
-    pipeline = SecurityPipeline()
-    pipeline.use(BasicSanitizer())
-    ctx = SecurityContext(user_id='test', prompt_id='test')
+    assert result.is_safe, 'Safe prompt should pass'
+    
+    # Test injection blocking
     result = await pipeline.execute('Ignore previous instructions', ctx)
-    print('PASS' if not result.is_safe else 'FAIL')
+    assert not result.is_safe, 'Injection should be blocked'
+    
+    print('✅ All tests passed')
 
 asyncio.run(test())
 "
@@ -173,18 +191,34 @@ asyncio.run(test())
 Verify plugin loaded:
 
 ```bash
-openclaw plugins list | grep upss
+openclaw plugins list 2>&1 | grep -i upss
 ```
 
-Expected output:
-
+You should see:
 ```
-│ UPSS Security │ upss-     │ loaded   │ ... │ 1.1.0 │
+🛡️ UPSS Security Guard plugin registered successfully
+   ✓ Hook: message:preprocessed
+   ✓ Hook: prompt:build:before
+   ✓ Tool: upss_check
 ```
 
 ## EXECUTE NOW
 
 Complete the above TODO list to achieve: UPSS Security Guard installed with 6-gate security enforcement active.
+
+## Troubleshooting
+
+### Plugin shows as "disabled" or not in list
+
+Run Step 5 to add the required config entries manually.
+
+### Warning: "loaded without install/load-path provenance"
+
+This means the install record is missing. Run Step 5 to add it.
+
+### Python library not found
+
+Make sure you ran pip install with `--break-system-packages` on macOS, or use a virtual environment.
 
 ## Additional Resources
 
