@@ -11,7 +11,7 @@ import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..core.middleware import SecurityContext, SecurityMiddleware, SecurityResult
 
@@ -85,7 +85,7 @@ class LightweightAuditor(SecurityMiddleware):
         Returns:
             Dict with gate, control_id, and status info
         """
-        gate_info = {
+        gate_info: Dict[str, Any] = {
             "gates_passed": [],
             "gates_failed": [],
             "control_ids": [],

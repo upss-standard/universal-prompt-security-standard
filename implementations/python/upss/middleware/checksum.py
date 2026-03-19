@@ -12,7 +12,6 @@ import logging
 from pathlib import Path
 from typing import Dict, Optional
 
-from ..core.exceptions import IntegrityError
 from ..core.middleware import SecurityContext, SecurityMiddleware, SecurityResult
 
 logger = logging.getLogger(__name__)
@@ -56,7 +55,8 @@ class ChecksumMiddleware(SecurityMiddleware):
         Args:
             checksums: Direct mapping of prompt_id to SHA-256 checksum
             checksums_path: Path to JSON file containing checksums
-            fail_on_missing: If True, block prompts without checksums (default: warn only)
+            fail_on_missing: If True, block prompts without checksums
+                (default: warn only)
         """
         self.checksums: Dict[str, str] = {}
         self.fail_on_missing = fail_on_missing

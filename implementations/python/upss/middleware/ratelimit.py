@@ -108,7 +108,8 @@ class RateLimitMiddleware(SecurityMiddleware):
             Role string (default: "user")
         """
         metadata = context.metadata or {}
-        return metadata.get("role", "user")
+        role = metadata.get("role", "user")
+        return str(role) if role else "user"
 
     def _get_limit_for_role(self, role: str) -> int:
         """
