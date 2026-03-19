@@ -19,20 +19,32 @@ import { loadConfig, UPSSConfig } from "./config.js";
 let pipeline: ReturnType<typeof createSecurityPipeline> | null = null;
 let pluginConfig: Required<UPSSConfig> | null = null;
 
-// ── Logging Helper ─────────────────────────────────────────────────────────
+// Logger reference (set during registration)
+let logger: {
+  info: (message: string) => void;
+  error: (message: string) => void;
+  warn: (message: string) => void;
+} | null = null;
 
-function log(message: string): void {
-  const now = new Date();
-  const timestamp = now.toTimeString().split(" ")[0];
-  console.log(`${timestamp} [plugins] [upss-security-guard] ${message}`);
+/** Log an info message using the plugin logger */
+function logInfo(message: string): void {
+  const formattedMessage = `[upss] ${message}`;
+  if (logger) {
+    logger.info(formattedMessage);
+  } else {
+    console.log(formattedMessage);
+  }
 }
 
+/** Log an error message using the plugin logger */
 function logError(message: string): void {
-  const now = new Date();
-  const timestamp = now.toTimeString().split(" ")[0];
-  console.error(`${timestamp} [plugins] [upss-security-guard] ❌ ${message}`);
+  const formattedMessage = `[upss] ${message}`;
+  if (logger) {
+    logger.error(formattedMessage);
+  } else {
+    console.error(formattedMessage);
+  }
 }
-
 // ── Hook Handlers ───────────────────────────────────────────────────────────
 
 /**
@@ -60,7 +72,7 @@ export async function handleMessagePreprocessed(
   });
 
   if (!result.isSafe) {
-    log(
+    logInfo(
       `🚨 BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
     );
     return {
@@ -112,7 +124,7 @@ export async function handleBeforePromptBuild(
   });
 
   if (!result.isSafe) {
-    log(
+    logInfo(
       `🚨 BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
     );
     return {
@@ -144,9 +156,14 @@ export function register(api: any): void {
   const cfg = api.pluginConfig ?? {};
   pluginConfig = loadConfig(cfg);
 
+  // Store logger reference for use throughout the plugin
+  if (api.logger) {
+    logger = api.logger;
+  }
+
   // Check for existing registration
   if ((globalThis as any).__upssRegistered) {
-    log("⚠️  Already registered, skipping");
+    logInfo("already registered, skipping");
     return;
   }
 
@@ -157,17 +174,14 @@ export function register(api: any): void {
     // Mark as registered
     (globalThis as any).__upssRegistered = true;
 
-    log(
-      `🛡️  Plugin registered (6 gates, riskThreshold=${pluginConfig.riskThreshold}, action=${pluginConfig.defaultAction})`
+    logInfo(
+      `Plugin loaded (enabled=true, riskThreshold=${pluginConfig.riskThreshold}, action=${pluginConfig.defaultAction})`
     );
 
     // Register hooks using api.on() pattern (like foundry)
     if (api.on) {
       api.on("message:preprocessed", handleMessagePreprocessed);
-      log("✓ Hook registered: message:preprocessed");
-
       api.on("prompt:build:before", handleBeforePromptBuild);
-      log("✓ Hook registered: prompt:build:before");
     }
 
     // Register tool for manual checks
@@ -219,7 +233,6 @@ export function register(api: any): void {
         },
         { names: ["upss_check"] }
       );
-      log("✓ Tool registered: upss_check");
     }
   } catch (error) {
     logError(`Registration failed: ${error}`);
