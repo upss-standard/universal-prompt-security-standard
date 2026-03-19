@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://upss-standard.org/prompts.schema.json",
+  "title": "UPSS Prompts Catalog",
+  "description": "Schema for Universal Prompt Security Standard prompts configuration",
+  "type": "object",
+  "required": ["version", "prompts"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "UPSS schema version",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "prompts": {
+      "type": "array",
+      "description": "List of prompt definitions",
+      "items": {
+        "$ref": "#/definitions/PromptDefinition"
+      },
+      "minItems": 1
+    },
+    "rules": {
+      "$ref": "#/definitions/RulesDefinition"
+    }
+  },
+  "definitions": {
+    "PromptDefinition": {
+      "type": "object",
+      "required": ["id", "name", "content", "category", "version", "riskLevel"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the prompt",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name"
+        },
+        "content": {
+          "type": "string",
+          "description": "The prompt content"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["system", "user", "fallback", "internal"],
+          "description": "Prompt category for RBAC"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version"
+        },
+        "riskLevel": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"],
+          "description": "Risk assessment"
+        },
+        "checksum": {
+          "type": "string",
+          "description": "SHA-256 checksum for integrity verification",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "approved": {
+          "type": "boolean",
+          "description": "Whether prompt is approved for production use"
+        },
+        "approvedBy": {
+          "type": "string",
+          "description": "User who approved the prompt"
+        },
+        "approvedDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 approval timestamp"
+        },
+        "changeLogRef": {
+          "type": "string",
+          "description": "Reference to changelog entry"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional metadata"
+        }
+      }
+    },
+    "RulesDefinition": {
+      "type": "object",
+      "properties": {
+        "allowedVariables": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Whitelist of allowed template variables"
+        },
+        "allowedSources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed input sources"
+        },
+        "blockedPatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional blocked patterns (regex)"
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum prompt length"
+        }
+      }
+    }
+  }
+}

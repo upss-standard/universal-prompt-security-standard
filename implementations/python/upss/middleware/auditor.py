@@ -1,36 +1,45 @@
 """
-Lightweight audit logging middleware.
+Lightweight audit logging middleware with structured security events.
 
 This module provides simple, file-based audit logging without requiring
 complex infrastructure setup.
+
+OWASP LLM01:2025 Control: RS-01 through RS-05, CR-03 - Audit Logging
 """
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from ..core.middleware import SecurityContext, SecurityMiddleware, SecurityResult
 
 
 class LightweightAuditor(SecurityMiddleware):
     """
-    Minimal audit logging middleware.
+    Minimal audit logging middleware with structured security event logging.
 
-    Logs all prompt access to a JSONL (JSON Lines) file for audit trail.
-    No complex infrastructure required - just file-based logging.
+    Logs all prompt access and security events to a JSONL (JSON Lines) file
+    for audit trail. No complex infrastructure required - just file-based logging.
 
     Each log entry includes:
     - Timestamp (ISO 8601 format)
     - User ID
     - Prompt ID
+    - Prompt hash (SHA-256 first 16 chars)
     - Risk level
     - Environment
+    - Gate ID and Control ID (from previous middleware results)
+    - Security status (passed/blocked)
+    - Violations detected
     - Prompt length and preview
 
     Example:
         pipeline = SecurityPipeline()
-        pipeline.use(LightweightAuditor())
+        pipeline.use(BasicSanitizer())
+        pipeline.use(InputValidator())
+        pipeline.use(LightweightAuditor())  # Log results from all previous
 
         # Or with custom log path
         pipeline.use(LightweightAuditor(log_path="logs/custom_audit.jsonl"))
@@ -52,27 +61,98 @@ class LightweightAuditor(SecurityMiddleware):
         if not self.log_path.exists():
             self.log_path.touch()
 
-    async def process(self, prompt: str, context: SecurityContext) -> SecurityResult:
+    def _compute_prompt_hash(self, prompt: str) -> str:
         """
-        Log prompt access and pass through unchanged.
+        Compute SHA-256 hash of prompt for logging (first 16 chars).
 
         Args:
             prompt: The prompt text
-            context: Security context
+
+        Returns:
+            First 16 characters of SHA-256 hash
+        """
+        return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
+
+    def _extract_gate_info(self, metadata: dict) -> dict:
+        """
+        Extract gate and control information from middleware metadata.
+
+        Looks through all middleware results to find gate/control IDs.
+
+        Args:
+            metadata: Metadata dict from SecurityResult
+
+        Returns:
+            Dict with gate, control_id, and status info
+        """
+        gate_info: Dict[str, Any] = {
+            "gates_passed": [],
+            "gates_failed": [],
+            "control_ids": [],
+            "status": "passed",
+        }
+
+        # Check for middleware_results (from pipeline execution)
+        middleware_results = metadata.get("middleware_results", {})
+
+        for middleware_name, result_meta in middleware_results.items():
+            gate = result_meta.get("gate", "")
+            control_id = result_meta.get("control_id", "")
+            status = result_meta.get("status", "")
+
+            if gate:
+                if status == "passed" or result_meta.get("violations", []) == []:
+                    gate_info["gates_passed"].append(gate)
+                else:
+                    gate_info["gates_failed"].append(gate)
+                    gate_info["status"] = "blocked"
+
+            if control_id and control_id not in gate_info["control_ids"]:
+                gate_info["control_ids"].append(control_id)
+
+        return gate_info
+
+    async def process(self, prompt: str, context: SecurityContext) -> SecurityResult:
+        """
+        Log prompt access and security events.
+
+        Creates a structured audit entry with:
+        - Gate ID and Control ID from previous middleware
+        - Prompt hash for integrity tracking
+        - Security status (passed/blocked)
+        - All violations detected
+
+        Args:
+            prompt: The prompt text
+            context: Security context (may contain middleware_results in metadata)
 
         Returns:
             SecurityResult marking prompt as safe (auditor doesn't block)
         """
-        # Create audit entry
+        prompt_hash = self._compute_prompt_hash(prompt)
+        metadata = context.metadata or {}
+
+        # Extract gate information from previous middleware results
+        gate_info = self._extract_gate_info(metadata)
+
+        # Create audit entry with structured security event data
         audit_entry = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "user_id": context.user_id,
             "prompt_id": context.prompt_id,
+            "prompt_hash": prompt_hash,
             "risk_level": context.risk_level,
             "environment": context.environment,
             "prompt_length": len(prompt),
             "prompt_preview": prompt[:100] if len(prompt) > 100 else prompt,
-            "metadata": context.metadata,
+            # Structured security fields
+            "gates_passed": gate_info["gates_passed"],
+            "gates_failed": gate_info["gates_failed"],
+            "control_ids": gate_info["control_ids"],
+            "status": gate_info["status"],
+            "violations": metadata.get("violations", []),
+            # Full metadata for debugging
+            "metadata": metadata,
         }
 
         # Append to log file (JSONL format - one JSON object per line)
@@ -95,6 +175,7 @@ class LightweightAuditor(SecurityMiddleware):
             metadata={
                 "audited": logged,
                 "log_path": str(self.log_path),
+                "prompt_hash": prompt_hash,
                 "error": error,
             },
         )
@@ -104,44 +185,74 @@ class LightweightAuditor(SecurityMiddleware):
         entry: dict,
         user_id: Optional[str],
         prompt_id: Optional[str],
+        prompt_hash: Optional[str],
+        status: Optional[str],
+        control_id: Optional[str],
         start_time: Optional[datetime],
         end_time: Optional[datetime],
     ) -> bool:
         """Check if entry matches all filters."""
-        if user_id and entry.get("user_id") != user_id:
-            return False
+        filters = [
+            (user_id, "user_id"),
+            (prompt_id, "prompt_id"),
+            (prompt_hash, "prompt_hash"),
+            (status, "status"),
+        ]
 
-        if prompt_id and entry.get("prompt_id") != prompt_id:
-            return False
-
-        if start_time or end_time:
-            try:
-                entry_time = datetime.fromisoformat(
-                    entry["timestamp"].replace("Z", "+00:00")
-                )
-                if start_time and entry_time < start_time:
-                    return False
-                if end_time and entry_time > end_time:
-                    return False
-            except (KeyError, ValueError):
+        for filter_val, key in filters:
+            if filter_val and entry.get(key) != filter_val:
                 return False
 
+        if control_id and control_id not in entry.get("control_ids", []):
+            return False
+
+        if not self._time_matches(entry, start_time, end_time):
+            return False
+
         return True
+
+    def _time_matches(
+        self,
+        entry: dict,
+        start_time: Optional[datetime],
+        end_time: Optional[datetime],
+    ) -> bool:
+        """Check if entry timestamp is within time range."""
+        if not start_time and not end_time:
+            return True
+
+        try:
+            entry_time = datetime.fromisoformat(
+                entry["timestamp"].replace("Z", "+00:00")
+            )
+            if start_time and entry_time < start_time:
+                return False
+            if end_time and entry_time > end_time:
+                return False
+            return True
+        except (KeyError, ValueError):
+            return False
 
     def query_logs(
         self,
         user_id: Optional[str] = None,
         prompt_id: Optional[str] = None,
+        prompt_hash: Optional[str] = None,
+        status: Optional[str] = None,
+        control_id: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         limit: int = 100,
-    ) -> list:
+    ) -> List[dict]:
         """
         Query audit logs with filters.
 
         Args:
             user_id: Filter by user ID
             prompt_id: Filter by prompt ID
+            prompt_hash: Filter by prompt hash
+            status: Filter by status (passed/blocked)
+            control_id: Filter by control ID (RS-01, CR-03, etc.)
             start_time: Filter by start time
             end_time: Filter by end time
             limit: Maximum number of entries to return
@@ -152,7 +263,7 @@ class LightweightAuditor(SecurityMiddleware):
         if not self.log_path.exists():
             return []
 
-        results: list = []
+        results: List[dict] = []
 
         with open(self.log_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -162,7 +273,14 @@ class LightweightAuditor(SecurityMiddleware):
                 try:
                     entry = json.loads(line.strip())
                     if self._matches_filters(
-                        entry, user_id, prompt_id, start_time, end_time
+                        entry,
+                        user_id,
+                        prompt_id,
+                        prompt_hash,
+                        status,
+                        control_id,
+                        start_time,
+                        end_time,
                     ):
                         results.append(entry)
                 except json.JSONDecodeError:
@@ -170,3 +288,41 @@ class LightweightAuditor(SecurityMiddleware):
                     continue
 
         return results
+
+    def get_security_summary(self) -> dict:
+        """
+        Get summary of security events from logs.
+
+        Returns:
+            Dict with counts of passed/blocked, control_ids hit, etc.
+        """
+        if not self.log_path.exists():
+            return {"total": 0, "passed": 0, "blocked": 0, "control_ids": {}}
+
+        total = 0
+        passed = 0
+        blocked = 0
+        control_id_counts: dict = {}
+
+        with open(self.log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line.strip())
+                    total += 1
+
+                    if entry.get("status") == "passed":
+                        passed += 1
+                    elif entry.get("status") == "blocked":
+                        blocked += 1
+
+                    for cid in entry.get("control_ids", []):
+                        control_id_counts[cid] = control_id_counts.get(cid, 0) + 1
+                except json.JSONDecodeError:
+                    continue
+
+        return {
+            "total": total,
+            "passed": passed,
+            "blocked": blocked,
+            "control_ids": control_id_counts,
+        }

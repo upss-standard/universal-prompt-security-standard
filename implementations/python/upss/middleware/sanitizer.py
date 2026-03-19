@@ -62,6 +62,14 @@ class BasicSanitizer(SecurityMiddleware):
         r"developer\s+mode",
         r"god\s+mode",
         r"root\s+access",
+        # Jailbreak attempts
+        r"jailbreak",
+        r"DAN\b",
+        # System prompt extraction
+        r"reveal\s+your\s+(system\s+)?prompt",
+        r"show\s+me\s+your\s+(system\s+)?(prompt|instructions)",
+        r"what\s+is\s+your\s+system\s+prompt",
+        r"repeat\s+(your\s+)?(system\s+)?instructions",
     ]
 
     def __init__(self, block_patterns: Optional[List[str]] = None):

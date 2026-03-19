@@ -38,7 +38,14 @@ from .core.middleware import (
 from .core.models import AuditEntry, MigrationReport, PromptContent
 
 # Essential Security Primitives
-from .middleware import BasicSanitizer, InputValidator, LightweightAuditor, SimpleRBAC
+from .middleware import (
+    BasicSanitizer,
+    ChecksumMiddleware,
+    InputValidator,
+    LightweightAuditor,
+    RateLimitMiddleware,
+    SimpleRBAC,
+)
 
 __all__ = [
     # Legacy v1.x
@@ -64,4 +71,6 @@ __all__ = [
     "LightweightAuditor",
     "SimpleRBAC",
     "InputValidator",
+    "ChecksumMiddleware",
+    "RateLimitMiddleware",
 ]

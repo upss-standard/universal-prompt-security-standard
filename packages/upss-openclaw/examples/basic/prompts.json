@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "prompts": {
+    "assistant": {
+      "path": "prompts/assistant.txt",
+      "checksum": "placeholder"
+    },
+    "greeting": {
+      "path": "prompts/greeting.txt",
+      "checksum": "placeholder"
+    }
+  }
+}
