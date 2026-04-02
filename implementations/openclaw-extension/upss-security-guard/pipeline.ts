@@ -52,6 +52,34 @@ const FORBIDDEN_PATTERNS = [
   /repeat\s+everything\s+above/i,
 ];
 
+// System-level tokens that should never appear in user content (Gate 4)
+const SYSTEM_LEVEL_TOKENS = [
+  /<\|im_start\|>/i,
+  /<\|im_end\|>/i,
+  /<\|system\|>/i,
+  /<\|user\|>/i,
+  /\[INST\]/i,
+  /<<SYS>>/i,
+  /^system:\s*/im,
+  /###instruction/i,
+  /---END OF SYSTEM PROMPT---/i,
+  /IGNORE EVERYTHING/i,
+  /\[hidden instruction\]/i,
+  /\[secret task\]/i,
+  /<!-- inject:/i,
+  /\[SYSTEM OVERRIDE\]/i,
+];
+
+// In-memory rate limit storage (Gate 6)
+// Note: In production, this should be shared across instances (Redis, etc.)
+interface RateLimitEntry {
+  count: number;
+  windowStart: number;
+}
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 60 seconds
+
 /**
  * Create a 6-gate security pipeline
  */
@@ -100,19 +128,63 @@ export function createSecurityPipeline(config: Required<UPSSConfig>) {
         }
       }
 
-      // Gate 5: Checksum (CR-03) - simplified, just check metadata
+      // Gate 4: Structural Role Separation (RS-02)
+      // Check if user content contains system-level tokens
+      if (violations.length === 0) {
+        for (const pattern of SYSTEM_LEVEL_TOKENS) {
+          const match = prompt.match(pattern);
+          if (match) {
+            violations.push(`RS-02: role boundary violation — user content contains system-level tokens: '${match[0]}'`);
+            failedGate = "Gate 4";
+            failedControlId = "RS-02";
+            riskScore = Math.max(riskScore, 0.85);
+            break;
+          }
+        }
+      }
+
+      // Gate 5: Checksum Verification (CR-03)
       if (config.enforceChecksums && context.metadata?.checksum) {
-        // Would verify checksum here
-        // For now, we just note it was configured
+        const expectedChecksum = context.metadata.checksum as string;
+        // In a full implementation, this would:
+        // 1. Read the prompt artifact file
+        // 2. Compute SHA-256 of content
+        // 3. Compare with expectedChecksum
+        // For now, we validate checksum format and log
+        if (!expectedChecksum || expectedChecksum.length !== 64) {
+          violations.push("CR-03: invalid checksum format in metadata");
+          failedGate = "Gate 5";
+          failedControlId = "CR-03";
+          riskScore = Math.max(riskScore, 0.7);
+        }
       }
 
-      // Gate 6: Rate Limit (RS-05) - simplified
-      if (config.enableRateLimit) {
-        // Rate limiting would be done by the RateLimitMiddleware
-        // This is a placeholder for the gate check
+      // Gate 6: Rate Limit Check (RS-05)
+      if (config.enableRateLimit && violations.length === 0) {
+        const role = (context.metadata?.role as string) || "user";
+        const roleKey = role as "user" | "developer" | "admin";
+        const limit = config.rateLimits?.[roleKey] ?? config.rateLimits?.user ?? 60;
+        const now = Date.now();
+        const key = `${context.userId}:${role}`;
+
+        let entry = rateLimitStore.get(key);
+        if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+          // New window
+          entry = { count: 1, windowStart: now };
+          rateLimitStore.set(key, entry);
+        } else {
+          entry.count++;
+          if (entry.count > limit) {
+            violations.push(`RS-05: rate limit exceeded for user ${context.userId} (role: ${role}) — ${entry.count}/${limit} requests in 60s`);
+            failedGate = "Gate 6";
+            failedControlId = "RS-05";
+            riskScore = Math.max(riskScore, 0.6);
+          }
+        }
       }
 
-      const isSafe = violations.length === 0;
+      // Determine safety based on violations AND riskThreshold
+      const isSafe = violations.length === 0 && riskScore < config.riskThreshold;
 
       return {
         isSafe,
