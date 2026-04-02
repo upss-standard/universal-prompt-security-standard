@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software or standard, please cite it as below."
 type: software
 title: "Universal Prompt Security Standard (UPSS)"
-version: v1.1.0
+version: v1.3.1
 abstract: "A composable security middleware framework for externalizing, securing, and managing LLM prompts and generative AI systems. Version 1.1.0 introduces modular security primitives that can be mixed and matched based on organizational needs."
 authors:
   - family-names: Veroy
@@ -28,7 +28,7 @@ identifiers:
   - type: doi
     value: 10.5281/zenodo.17472646
     description: "Zenodo DOI for UPSS"
-date-released: 2025-11-08
+date-released: 2026-04-02
 preferred-citation:
   type: generic
   title: "Universal Prompt Security Standard (UPSS): A Composable Security Middleware Framework for LLM Prompts"

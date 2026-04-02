@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-04-02
+
+### Release Notes
+## What's Changed
+* feat(openclaw): update security guard plugin with full 6-gate implementation by @alvinveroy in https://github.com/upss-standard/universal-prompt-security-standard/pull/29
+
+
+**Full Changelog**: https://github.com/upss-standard/universal-prompt-security-standard/compare/v1.3.0...v1.3.1
 ## [1.1.0] - 2025-11-08
 
 ### Added
@@ -62,3 +70,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial draft of the Universal Prompt Security Standard (UPSS)
 
 [1.0.1]: https://github.com/upss-standard/universal-prompt-security-standard/releases/tag/v1.0.1
+
+[1.3.1]: https://github.com/upss-standard/universal-prompt-security-standard/releases/tag/v1.3.1
