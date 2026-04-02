@@ -19,32 +19,45 @@ import { loadConfig, UPSSConfig } from "./config.js";
 let pipeline: ReturnType<typeof createSecurityPipeline> | null = null;
 let pluginConfig: Required<UPSSConfig> | null = null;
 
+const LOG_PREFIX = "[upss]";
+
 // Logger reference (set during registration)
 let logger: {
   info: (message: string) => void;
   error: (message: string) => void;
-  warn: (message: string) => void;
+  warn?: (message: string) => void;
 } | null = null;
 
 /** Log an info message using the plugin logger */
 function logInfo(message: string): void {
-  const formattedMessage = `[upss] ${message}`;
+  const fullMessage = `${LOG_PREFIX} ${message}`;
   if (logger) {
-    logger.info(formattedMessage);
+    logger.info(fullMessage);
   } else {
-    console.log(formattedMessage);
+    console.log(fullMessage);
   }
 }
 
 /** Log an error message using the plugin logger */
 function logError(message: string): void {
-  const formattedMessage = `[upss] ${message}`;
+  const fullMessage = `${LOG_PREFIX} ${message}`;
   if (logger) {
-    logger.error(formattedMessage);
+    logger.error(fullMessage);
   } else {
-    console.error(formattedMessage);
+    console.error(fullMessage);
   }
 }
+
+/** Log a warning message using the plugin logger */
+function logWarn(message: string): void {
+  const fullMessage = `${LOG_PREFIX} ${message}`;
+  if (logger?.warn) {
+    logger.warn(fullMessage);
+  } else {
+    console.warn(fullMessage);
+  }
+}
+
 // ── Hook Handlers ───────────────────────────────────────────────────────────
 
 /**
@@ -55,6 +68,11 @@ export async function handleMessagePreprocessed(
   event: string,
   ctx: any
 ): Promise<{ allow: boolean; reason?: string; metadata?: any }> {
+  // Check if plugin is enabled
+  if (pluginConfig && !pluginConfig.enabled) {
+    return { allow: true, reason: "UPSS disabled" };
+  }
+
   if (!pipeline) {
     logError("Pipeline not initialized");
     return { allow: false, reason: "UPSS not initialized" };
@@ -73,8 +91,43 @@ export async function handleMessagePreprocessed(
 
   if (!result.isSafe) {
     logInfo(
-      `🚨 BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
+      `BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
     );
+
+    // Handle defaultAction config
+    const action = pluginConfig?.defaultAction ?? "block";
+
+    if (action === "warn_only") {
+      logWarn(`WARN: ${result.violations[0]} — allowing due to warn_only mode`);
+      return {
+        allow: true,
+        reason: `UPSS WARN: ${result.violations[0]}`,
+        metadata: {
+          gate: result.metadata.gate,
+          controlId: result.metadata.controlId,
+          riskScore: result.riskScore,
+          violations: result.violations,
+          action: "warn_only",
+        },
+      };
+    }
+
+    if (action === "sanitize") {
+      logInfo(`SANITIZE: attempting to sanitize ${result.violations.length} violations`);
+      return {
+        allow: false,
+        reason: `UPSS SANITIZE: ${result.violations[0]} — sanitize not fully implemented, blocking instead`,
+        metadata: {
+          gate: result.metadata.gate,
+          controlId: result.metadata.controlId,
+          riskScore: result.riskScore,
+          violations: result.violations,
+          action: "sanitize",
+        },
+      };
+    }
+
+    // Default: block
     return {
       allow: false,
       reason: `UPSS BLOCK: ${result.violations[0]}`,
@@ -101,6 +154,11 @@ export async function handleBeforePromptBuild(
   event: string,
   ctx: any
 ): Promise<{ allow: boolean; reason?: string; metadata?: any }> {
+  // Check if plugin is enabled
+  if (pluginConfig && !pluginConfig.enabled) {
+    return { allow: true, reason: "UPSS disabled" };
+  }
+
   if (!pipeline) {
     logError("Pipeline not initialized");
     return { allow: false, reason: "UPSS not initialized" };
@@ -125,8 +183,42 @@ export async function handleBeforePromptBuild(
 
   if (!result.isSafe) {
     logInfo(
-      `🚨 BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
+      `BLOCK — ${result.metadata.gate} (${result.metadata.controlId}): ${result.violations[0]}`
     );
+
+    // Handle defaultAction config
+    const action = pluginConfig?.defaultAction ?? "block";
+
+    if (action === "warn_only") {
+      logWarn(`WARN: ${result.violations[0]} — allowing due to warn_only mode`);
+      return {
+        allow: true,
+        reason: `UPSS WARN: ${result.violations[0]}`,
+        metadata: {
+          gate: result.metadata.gate,
+          controlId: result.metadata.controlId,
+          riskScore: result.riskScore,
+          violations: result.violations,
+          action: "warn_only",
+        },
+      };
+    }
+
+    if (action === "sanitize") {
+      logInfo(`SANITIZE: attempting to sanitize ${result.violations.length} violations`);
+      return {
+        allow: false,
+        reason: `UPSS SANITIZE: ${result.violations[0]} — sanitize not fully implemented, blocking instead`,
+        metadata: {
+          gate: result.metadata.gate,
+          controlId: result.metadata.controlId,
+          riskScore: result.riskScore,
+          violations: result.violations,
+          action: "sanitize",
+        },
+      };
+    }
+
     return {
       allow: false,
       reason: `UPSS BLOCK: ${result.violations[0]}`,
@@ -175,13 +267,16 @@ export function register(api: any): void {
     (globalThis as any).__upssRegistered = true;
 
     logInfo(
-      `Plugin loaded (enabled=true, riskThreshold=${pluginConfig.riskThreshold}, action=${pluginConfig.defaultAction})`
+      `Plugin registered (6 gates, riskThreshold=${pluginConfig.riskThreshold}, action=${pluginConfig.defaultAction})`
     );
 
     // Register hooks using api.on() pattern (like foundry)
     if (api.on) {
-      api.on("message:preprocessed", handleMessagePreprocessed);
-      api.on("prompt:build:before", handleBeforePromptBuild);
+      api.on("message_received", handleMessagePreprocessed);
+      logInfo("Hook registered: message_received");
+
+      api.on("before_prompt_build", handleBeforePromptBuild);
+      logInfo("Hook registered: before_prompt_build");
     }
 
     // Register tool for manual checks
@@ -226,13 +321,14 @@ export function register(api: any): void {
               gate: result.metadata.gate,
               controlId: result.metadata.controlId,
               summary: result.isSafe
-                ? "🛡️ PASS — all 6 security gates cleared"
-                : `🚨 BLOCK — ${result.violations[0]}`,
+                ? "PASS — all 6 security gates cleared"
+                : `BLOCK — ${result.violations[0]}`,
             };
           },
         },
         { names: ["upss_check"] }
       );
+      logInfo("Tool registered: upss_check");
     }
   } catch (error) {
     logError(`Registration failed: ${error}`);
